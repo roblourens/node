@@ -1146,6 +1146,8 @@ Local<Value> MakeCallback(Environment* env,
   bool ran_init_callback = false;
   bool has_domain = false;
 
+  Environment::AsyncCallbackScope callback_scope(env);
+
   // TODO(trevnorris): Adding "_asyncQueue" to the "this" in the init callback
   // is a horrible way to detect usage. Rethink how detection should happen.
   if (recv->IsObject()) {
@@ -1206,7 +1208,7 @@ Local<Value> MakeCallback(Environment* env,
     }
   }
 
-  if (!env->KickNextTick())
+  if (!env->KickNextTick(&callback_scope))
     return Undefined(env->isolate());
 
   return ret;
@@ -4166,7 +4168,10 @@ static void StartNodeInstance(void* arg) {
     if (instance_data->use_debug_agent())
       StartDebug(env, debug_wait_connect);
 
-    LoadEnvironment(env);
+    {
+      Environment::AsyncCallbackScope callback_scope(env);
+      LoadEnvironment(env);
+    }
 
     env->set_trace_sync_io(trace_sync_io);
 
