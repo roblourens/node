@@ -1,6 +1,7 @@
 #include "node.h"
 #include "node_buffer.h"
 #include "node_constants.h"
+#include "node_debugger.h"
 #include "node_file.h"
 #include "node_http_parser.h"
 #include "node_javascript.h"
@@ -4166,6 +4167,9 @@ static void StartNodeInstance(void* arg) {
     if (instance_data->use_debug_agent())
       StartDebug(env, debug_wait_connect);
 
+    if (!instance_data->is_remote_debug_server())
+      NodeDebugger::init(default_platform, isolate, context);
+
     {
       Environment::AsyncCallbackScope callback_scope(env);
       LoadEnvironment(env);
@@ -4181,11 +4185,19 @@ static void StartNodeInstance(void* arg) {
       SealHandleScope seal(isolate);
       bool more;
       do {
-        v8::platform::PumpMessageLoop(default_platform, isolate);
+        if (instance_data->is_remote_debug_server()) {
+          NodeDebugger::instance()->PumpServerMessageLoop();
+        } else {
+          while (v8::platform::PumpMessageLoop(default_platform, isolate)) {}
+        }
         more = uv_run(env->event_loop(), UV_RUN_ONCE);
 
         if (more == false) {
-          v8::platform::PumpMessageLoop(default_platform, isolate);
+          if (instance_data->is_remote_debug_server()) {
+            NodeDebugger::instance()->PumpServerMessageLoop();
+          } else {
+            while (v8::platform::PumpMessageLoop(default_platform, isolate)) {}
+          }
           EmitBeforeExit(env);
 
           // Emit `beforeExit` if the loop became alive either after emitting
@@ -4224,6 +4236,11 @@ static void StartNodeInstance(void* arg) {
   delete array_buffer_allocator;
 }
 
+static void DevToolsRun(void* arg) {
+  fprintf(stderr, "Open 'chrome-devtools://devtools/bundled/inspector.html?ws=localhost:9222/node' in Chrome Canary\n");
+  StartNodeInstance(arg);
+}
+
 int Start(int argc, char** argv) {
   PlatformInit();
 
@@ -4251,6 +4268,22 @@ int Start(int argc, char** argv) {
 
   int exit_code = 1;
   {
+    uv_loop_t worker_loop;
+    int rc = uv_loop_init(&worker_loop);
+    CHECK_EQ(0, rc);
+    // Remote debug server
+    const char* argv2[] = { argv[0],  "./lib/remote_debugging_server.js"};
+    NodeInstanceData worker_instance_data(NodeInstanceType::REMOTE_DEBUG_SERVER,
+                                   &worker_loop,
+                                   2, //argc,
+                                   argv2, //const_cast<const char**>(argv),
+                                   exec_argc,
+                                   exec_argv,
+                                   false);
+    uv_thread_t worker_thread;
+    rc = uv_thread_create(&worker_thread, &DevToolsRun, &worker_instance_data);
+    CHECK_EQ(0, rc);
+
     NodeInstanceData instance_data(NodeInstanceType::MAIN,
                                    uv_default_loop(),
                                    argc,

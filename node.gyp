@@ -104,7 +104,8 @@
         'node_js2c#host',
         'deps/cares/cares.gyp:cares',
         'deps/v8/tools/gyp/v8.gyp:v8',
-        'deps/v8/tools/gyp/v8.gyp:v8_libplatform'
+        'deps/v8/tools/gyp/v8.gyp:v8_libplatform',
+        'deps/v8_inspector/v8_inspector.gyp:v8_inspector',
       ],
 
       'include_dirs': [
@@ -112,10 +113,15 @@
         'tools/msvs/genfiles',
         'deps/uv/src/ares',
         '<(SHARED_INTERMEDIATE_DIR)', # for node_natives.h
-        'deps/v8' # include/v8_platform.h
+        '<(SHARED_INTERMEDIATE_DIR)/blink', # for inspector
+        'deps/v8', # include/v8_platform.h
+        'deps/v8_inspector',
+        'deps/v8_inspector/deps/wtf', # temporary
       ],
 
       'sources': [
+        'src/node_debugger.cc',
+        'src/node_debugger.h',
         'src/debug-agent.cc',
         'src/async-wrap.cc',
         'src/env.cc',
