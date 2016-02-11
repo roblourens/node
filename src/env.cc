@@ -86,7 +86,6 @@ bool Environment::KickNextTick(Environment::AsyncCallbackScope* scope) {
   tick_callback_function()->Call(process_object(), 0, nullptr);
 
   if (try_catch.HasCaught()) {
-    info->set_last_threw(true);
     return false;
   }
 
