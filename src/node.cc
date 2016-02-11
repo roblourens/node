@@ -1179,21 +1179,22 @@ Local<Value> MakeCallback(Environment* env,
   }
 
   if (ran_init_callback && !pre_fn.IsEmpty()) {
-    try_catch.SetVerbose(false);
     pre_fn->Call(object, 0, nullptr);
     if (try_catch.HasCaught())
       FatalError("node::MakeCallback", "pre hook threw");
-    try_catch.SetVerbose(true);
   }
 
   Local<Value> ret = callback->Call(recv, argc, argv);
 
   if (ran_init_callback && !post_fn.IsEmpty()) {
-    try_catch.SetVerbose(false);
     post_fn->Call(object, 0, nullptr);
     if (try_catch.HasCaught())
       FatalError("node::MakeCallback", "post hook threw");
-    try_catch.SetVerbose(true);
+  }
+
+  // If the return value is empty then the callback threw.
+  if (ret.IsEmpty()) {
+    return Undefined(env->isolate());
   }
 
   if (has_domain) {
@@ -1203,10 +1204,6 @@ Local<Value> MakeCallback(Environment* env,
       if (try_catch.HasCaught())
         return Undefined(env->isolate());
     }
-  }
-
-  if (try_catch.HasCaught()) {
-    return Undefined(env->isolate());
   }
 
   if (!env->KickNextTick())
