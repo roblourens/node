@@ -926,7 +926,7 @@
     };
 
     NativeModule.isInternal = function(id) {
-      return id.startsWith('internal/');
+      return id.startsWith('internal/') || id.startsWith('vendor/');
     };
   }
 
