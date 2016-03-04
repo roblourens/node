@@ -4272,7 +4272,7 @@ int Start(int argc, char** argv) {
     int rc = uv_loop_init(&worker_loop);
     CHECK_EQ(0, rc);
     // Remote debug server
-    const char* argv2[] = { argv[0],  "./lib/remote_debugging_server.js"};
+    const char* argv2[] = { argv[0], "--remote_debugging_server" };
     NodeInstanceData worker_instance_data(NodeInstanceType::REMOTE_DEBUG_SERVER,
                                    &worker_loop,
                                    2, //argc,
