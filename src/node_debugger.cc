@@ -11,6 +11,7 @@
 #include "v8-platform.h"
 
 #include "platform/inspector_protocol/FrontendChannel.h"
+#include "platform/inspector_protocol/Values.h"
 #include "platform/v8_inspector/public/V8Inspector.h"
 
 #include <string>
@@ -24,15 +25,15 @@ class NodeDebugger::ChannelImpl final : public protocol::FrontendChannel {
   ChannelImpl() {}
   virtual ~ChannelImpl() {}
  private:
-  virtual void sendProtocolResponse(int sessionId, int callId, PassRefPtr<blink::JSONObject> message) override {
+  virtual void sendProtocolResponse(int sessionId, int callId, PassOwnPtr<protocol::DictionaryValue> message) override {
     sendMessageToFrontend(message);
   }
-  virtual void sendProtocolNotification(PassRefPtr<blink::JSONObject> message) override {
+  virtual void sendProtocolNotification(PassOwnPtr<protocol::DictionaryValue> message) override {
     sendMessageToFrontend(message);
   }
   virtual void flush() override { }
 
-  void sendMessageToFrontend(PassRefPtr<blink::JSONObject> message) {
+  void sendMessageToFrontend(PassOwnPtr<protocol::DictionaryValue> message) {
     WTF::String message_string = message->toJSONString();
     std::string message_std(message_string.utf8().data(), message_string.length());
     node::NodeDebugger::instance()->SendToFrontend(message_std);
