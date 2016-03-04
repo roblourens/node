@@ -81,6 +81,7 @@
       'lib/internal/util.js',
       'lib/internal/v8_prof_polyfill.js',
       'lib/internal/v8_prof_processor.js',
+      'lib/internal/inspector/remote_debugging_server.js',
       'lib/internal/streams/lazy_transform.js',
       'deps/node_modules/options/lib/options.js',
       'deps/node_modules/ultron/index.js',
