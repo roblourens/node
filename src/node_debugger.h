@@ -25,10 +25,11 @@ class NodeDebugger final {
   void DispatchOnBackend(const std::string&);
 
   void PumpServerMessageLoop();
+  void RunIfPaused();
 
   // Called on the main (inspected) thread.
   void SendToFrontend(const std::string&);
-  void WaitForStartup();
+  void WaitForStartup(v8::Local<v8::Function> callback);
 
  private:
   class DispatchOnInspectorBackendTask;
@@ -42,11 +43,12 @@ class NodeDebugger final {
 
   v8::Platform* platform_;
   v8::Isolate* main_thread_isolate_;
-  uv_sem_t start_sem_;
+  bool waiting_for_startup_;
   uv_async_t main_thread_async_;
   uv_async_t server_thread_async_;
   Environment* server_env_;
   v8::Global<v8::Object> connection_;
+  v8::Global<v8::Function> startup_callback_;
   // Abuse v8::Platform to post tasks to the server thread.
   v8::Platform* server_message_loop_;
   blink::V8Inspector* inspector_;

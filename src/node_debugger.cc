@@ -45,6 +45,9 @@ class NodeDebugger::DispatchOnInspectorBackendTask : public v8::Task {
   explicit DispatchOnInspectorBackendTask(const std::string& message) : message_(message) {}
   void Run() override {
     String message = String::fromUTF8(message_.data(), message_.length());
+    if (message.find("Runtime.run") != std::string::npos) {
+      NodeDebugger::instance()->RunIfPaused();
+    }
     NodeDebugger::instance()->inspector_->dispatchMessageFromFrontend(message);
   }
 
@@ -94,6 +97,7 @@ NodeDebugger* NodeDebugger::instance() {
 NodeDebugger::NodeDebugger(v8::Platform* platform, v8::Isolate* isolate, v8::Local<v8::Context> context)
     : platform_(platform)
     , main_thread_isolate_(isolate)
+    , waiting_for_startup_(false)
     , server_env_(nullptr)
     , server_message_loop_(v8::platform::CreateDefaultPlatform())
 {
@@ -101,15 +105,12 @@ NodeDebugger::NodeDebugger(v8::Platform* platform, v8::Isolate* isolate, v8::Loc
   uv_loop_t* loop = env->event_loop();
   int rc = uv_async_init(loop, &main_thread_async_, &NodeDebugger::Async);
   CHECK_EQ(0, rc);
-  rc = uv_sem_init(&start_sem_, 0);
-  CHECK_EQ(0, rc);
   inspector_ = new blink::V8Inspector(isolate, context, platform);
   channel_ = new NodeDebugger::ChannelImpl();
   inspector_->connectFrontend(channel_);
 }
 
 NodeDebugger::~NodeDebugger() {
-  uv_sem_destroy(&start_sem_);
   delete channel_;
   delete inspector_;
   delete server_message_loop_;
@@ -119,7 +120,6 @@ void NodeDebugger::Connect(Environment* server_env, v8::Local<v8::Object> connec
   ASSERT(!server_env_);
   server_env_ = server_env;
   connection_.Reset(server_env->isolate(), connection);
-  uv_sem_post(&start_sem_);
 
   uv_loop_t* loop = server_env_->event_loop();
   int rc = uv_async_init(loop, &server_thread_async_, &NodeDebugger::Async);
@@ -132,8 +132,24 @@ void NodeDebugger::Disconnect() {
   connection_.Reset();
 }
 
-void NodeDebugger::WaitForStartup() {
-  uv_sem_wait(&start_sem_);
+void NodeDebugger::WaitForStartup(v8::Local<v8::Function> callback) {
+  waiting_for_startup_ = true;
+  startup_callback_.Reset(main_thread_isolate_, callback);
+}
+
+void NodeDebugger::RunIfPaused() {
+  if (waiting_for_startup_) {
+    v8::HandleScope handle_scope(main_thread_isolate_);
+    v8::Local<v8::Context> context = main_thread_isolate_->GetCurrentContext();
+    waiting_for_startup_ = false;
+    v8::Local<v8::Function> function =
+      v8::Local<v8::Function>::New(main_thread_isolate_, startup_callback_);
+    v8::Local<v8::Value> argv[] = { };
+    v8::Debug::DebugBreak(main_thread_isolate_);
+    if (function->Call(context, function, 0, argv).IsEmpty())
+      fprintf(stderr, "Continuing startup failed\n");
+    startup_callback_.Reset();
+  }
 }
 
 void NodeDebugger::DispatchOnBackend(const std::string& message) {
@@ -186,6 +202,9 @@ class NodeDebuggerContext {
 
   static void DispatchOnInspectorBackend(const v8::FunctionCallbackInfo<v8::Value>& info) {
     if (!info[0]->IsString()) {
+      v8::Isolate* isolate = v8::Isolate::GetCurrent();
+      isolate->ThrowException(v8::String::NewFromUtf8(isolate,
+        "Protocol messages must be strings"));
       return;
     }
     v8::Local<v8::String> v8message = info[0].As<v8::String>();
@@ -199,7 +218,13 @@ class NodeDebuggerContext {
   }
 
   static void WaitForStartup(const v8::FunctionCallbackInfo<v8::Value>& info) {
-    NodeDebugger::instance()->WaitForStartup();
+    if (!info[0]->IsFunction()) {
+      v8::Isolate* isolate = v8::Isolate::GetCurrent();
+      isolate->ThrowException(v8::String::NewFromUtf8(isolate,
+        "WaitForStartup requires a function"));
+      return;
+    }
+    NodeDebugger::instance()->WaitForStartup(info[0].As<v8::Function>());
   }
 };
 
