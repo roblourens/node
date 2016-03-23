@@ -146,6 +146,7 @@ static const char* eval_string = nullptr;
 static unsigned int preload_module_count = 0;
 static const char** preload_modules = nullptr;
 static bool use_debug_agent = false;
+static bool use_devtools = false;
 static bool debug_wait_connect = false;
 static int debug_port = 5858;
 static bool prof_process = false;
@@ -3046,6 +3047,11 @@ void SetupProcessObject(Environment* env,
     READONLY_PROPERTY(process, "profProcess", True(env->isolate()));
   }
 
+  // --devtools
+  if (use_devtools) {
+    READONLY_PROPERTY(process, "devtoolsPause", True(env->isolate()));
+  }
+
   // --trace-deprecation
   if (trace_deprecation) {
     READONLY_PROPERTY(process, "traceDeprecation", True(env->isolate()));
@@ -3257,6 +3263,8 @@ static bool ParseDebugOpt(const char* arg) {
     port = arg + sizeof("--debug-brk=") - 1;
   } else if (!strncmp(arg, "--debug-port=", sizeof("--debug-port=") - 1)) {
     port = arg + sizeof("--debug-port=") - 1;
+  } else if (!strncmp(arg, "--devtools", sizeof("--devtools") - 1)) {
+    use_devtools = true;
   } else {
     return false;
   }
@@ -4167,7 +4175,7 @@ static void StartNodeInstance(void* arg) {
     if (instance_data->use_debug_agent())
       StartDebug(env, debug_wait_connect);
 
-    if (!instance_data->is_remote_debug_server())
+    if (use_devtools && !instance_data->is_remote_debug_server())
       NodeDebugger::init(default_platform, isolate, context);
 
     {
@@ -4268,21 +4276,23 @@ int Start(int argc, char** argv) {
 
   int exit_code = 1;
   {
-    uv_loop_t worker_loop;
-    int rc = uv_loop_init(&worker_loop);
-    CHECK_EQ(0, rc);
-    // Remote debug server
-    const char* argv2[] = { argv[0], "--remote_debugging_server" };
-    NodeInstanceData worker_instance_data(NodeInstanceType::REMOTE_DEBUG_SERVER,
-                                   &worker_loop,
-                                   2, //argc,
-                                   argv2, //const_cast<const char**>(argv),
-                                   exec_argc,
-                                   exec_argv,
-                                   false);
-    uv_thread_t worker_thread;
-    rc = uv_thread_create(&worker_thread, &DevToolsRun, &worker_instance_data);
-    CHECK_EQ(0, rc);
+    if (use_devtools) {
+      uv_loop_t worker_loop;
+      int rc = uv_loop_init(&worker_loop);
+      CHECK_EQ(0, rc);
+      // Remote debug server
+      const char* argv2[] = { argv[0], "--remote_debugging_server" };
+      NodeInstanceData worker_instance_data(NodeInstanceType::REMOTE_DEBUG_SERVER,
+                                     &worker_loop,
+                                     2, //argc,
+                                     argv2, //const_cast<const char**>(argv),
+                                     exec_argc,
+                                     exec_argv,
+                                     false);
+      uv_thread_t worker_thread;
+      rc = uv_thread_create(&worker_thread, &DevToolsRun, &worker_instance_data);
+      CHECK_EQ(0, rc);
+    }
 
     NodeInstanceData instance_data(NodeInstanceType::MAIN,
                                    uv_default_loop(),

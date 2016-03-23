@@ -32,7 +32,7 @@ $ ninja -C out/Release/ node  -j10
 
 Run Node with remote debugging enabled:
 ```text
-$ ./out/Release/node examples/test.js
+$ ./out/Release/node --devtools examples/test.js
 ```
 
 The command will execute the script passed as the argument and start to wait for remote debugger

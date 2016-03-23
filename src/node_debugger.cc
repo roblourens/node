@@ -101,12 +101,15 @@ NodeDebugger::NodeDebugger(v8::Platform* platform, v8::Isolate* isolate, v8::Loc
   uv_loop_t* loop = env->event_loop();
   int rc = uv_async_init(loop, &main_thread_async_, &NodeDebugger::Async);
   CHECK_EQ(0, rc);
+  rc = uv_sem_init(&start_sem_, 0);
+  CHECK_EQ(0, rc);
   inspector_ = new blink::V8Inspector(isolate, context, platform);
   channel_ = new NodeDebugger::ChannelImpl();
   inspector_->connectFrontend(channel_);
 }
 
 NodeDebugger::~NodeDebugger() {
+  uv_sem_destroy(&start_sem_);
   delete channel_;
   delete inspector_;
   delete server_message_loop_;
@@ -116,6 +119,7 @@ void NodeDebugger::Connect(Environment* server_env, v8::Local<v8::Object> connec
   ASSERT(!server_env_);
   server_env_ = server_env;
   connection_.Reset(server_env->isolate(), connection);
+  uv_sem_post(&start_sem_);
 
   uv_loop_t* loop = server_env_->event_loop();
   int rc = uv_async_init(loop, &server_thread_async_, &NodeDebugger::Async);
@@ -126,6 +130,10 @@ void NodeDebugger::Disconnect() {
   fprintf(stderr, "NodeDebugger::Disconnect\n");
   server_env_ = nullptr;
   connection_.Reset();
+}
+
+void NodeDebugger::WaitForStartup() {
+  uv_sem_wait(&start_sem_);
 }
 
 void NodeDebugger::DispatchOnBackend(const std::string& message) {
@@ -163,6 +171,7 @@ class NodeDebuggerContext {
     env->SetMethod(exports, "connectToInspectorBackend", ConnectToInspectorBackend);
     env->SetMethod(exports, "dispatchOnInspectorBackend", DispatchOnInspectorBackend);
     env->SetMethod(exports, "disconnectFromInspectorBackend", DisconnectFromInspectorBackend);
+    env->SetMethod(exports, "waitForStartup", WaitForStartup);
   }
 
  private:
@@ -187,6 +196,10 @@ class NodeDebuggerContext {
 
   static void DisconnectFromInspectorBackend(const v8::FunctionCallbackInfo<v8::Value>& info) {
     NodeDebugger::instance()->Disconnect();
+  }
+
+  static void WaitForStartup(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    NodeDebugger::instance()->WaitForStartup();
   }
 };
 

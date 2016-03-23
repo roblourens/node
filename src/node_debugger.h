@@ -28,6 +28,7 @@ class NodeDebugger final {
 
   // Called on the main (inspected) thread.
   void SendToFrontend(const std::string&);
+  void WaitForStartup();
 
  private:
   class DispatchOnInspectorBackendTask;
@@ -41,6 +42,7 @@ class NodeDebugger final {
 
   v8::Platform* platform_;
   v8::Isolate* main_thread_isolate_;
+  uv_sem_t start_sem_;
   uv_async_t main_thread_async_;
   uv_async_t server_thread_async_;
   Environment* server_env_;
