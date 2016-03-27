@@ -147,6 +147,7 @@ static unsigned int preload_module_count = 0;
 static const char** preload_modules = nullptr;
 static bool use_debug_agent = false;
 static bool use_devtools = false;
+static bool pause_for_devtools = false;
 static bool debug_wait_connect = false;
 static int debug_port = 5858;
 static bool prof_process = false;
@@ -3048,7 +3049,7 @@ void SetupProcessObject(Environment* env,
   }
 
   // --devtools
-  if (use_devtools) {
+  if (pause_for_devtools) {
     READONLY_PROPERTY(process, "devtoolsPause", True(env->isolate()));
   }
 
@@ -3263,8 +3264,15 @@ static bool ParseDebugOpt(const char* arg) {
     port = arg + sizeof("--debug-brk=") - 1;
   } else if (!strncmp(arg, "--debug-port=", sizeof("--debug-port=") - 1)) {
     port = arg + sizeof("--debug-port=") - 1;
-  } else if (!strncmp(arg, "--devtools", sizeof("--devtools") - 1)) {
+  } else if (!strncmp(arg, "--remote-debugging-port=",
+      sizeof("--remote-debugging-port=") - 1)) {
     use_devtools = true;
+    port = arg + sizeof("--remote-debugging-port=") - 1;
+  } else if (!strncmp(arg, "--remote-debugging-port-brk=",
+      sizeof("--remote-debugging-port-brk=") - 1)) {
+    use_devtools = true;
+    pause_for_devtools = true;
+    port = arg + sizeof("--remote-debugging-port-brk=") - 1;
   } else {
     return false;
   }
@@ -4245,7 +4253,7 @@ static void StartNodeInstance(void* arg) {
 }
 
 static void DevToolsRun(void* arg) {
-  fprintf(stderr, "Open 'chrome-devtools://devtools/bundled/inspector.html?ws=localhost:9222/node' in Chrome Canary\n");
+  fprintf(stderr, "Open 'chrome-devtools://devtools/bundled/inspector.html?ws=localhost:%zu/node' in Chrome Canary\n", debug_port);
   StartNodeInstance(arg);
 }
 
