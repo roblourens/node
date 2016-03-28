@@ -33,6 +33,7 @@ class NodeDebugger final {
 
  private:
   class DispatchOnInspectorBackendTask;
+  class DisconnectInspectorBackendTask;
   class ConnectToInspectorBackendTask;
   class SendToFrontendTask;
   class ChannelImpl;

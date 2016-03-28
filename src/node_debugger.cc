@@ -55,6 +55,14 @@ class NodeDebugger::DispatchOnInspectorBackendTask : public v8::Task {
   std::string message_;
 };
 
+class NodeDebugger::DisconnectInspectorBackendTask : public v8::Task {
+ public:
+  explicit DisconnectInspectorBackendTask() {}
+  void Run() override {
+    NodeDebugger::instance()->inspector_->disconnectFrontend();
+  }
+};
+
 class NodeDebugger::SendToFrontendTask : public v8::Task {
  public:
   explicit SendToFrontendTask(const std::string& message) : message_(message) {}
@@ -107,7 +115,6 @@ NodeDebugger::NodeDebugger(v8::Platform* platform, v8::Isolate* isolate, v8::Loc
   CHECK_EQ(0, rc);
   inspector_ = new blink::V8Inspector(isolate, context, platform);
   channel_ = new NodeDebugger::ChannelImpl();
-  inspector_->connectFrontend(channel_);
 }
 
 NodeDebugger::~NodeDebugger() {
@@ -120,6 +127,7 @@ void NodeDebugger::Connect(Environment* server_env, v8::Local<v8::Object> connec
   ASSERT(!server_env_);
   server_env_ = server_env;
   connection_.Reset(server_env->isolate(), connection);
+  inspector_->connectFrontend(channel_);
 
   uv_loop_t* loop = server_env_->event_loop();
   int rc = uv_async_init(loop, &server_thread_async_, &NodeDebugger::Async);
@@ -130,6 +138,9 @@ void NodeDebugger::Disconnect() {
   fprintf(stderr, "NodeDebugger::Disconnect\n");
   server_env_ = nullptr;
   connection_.Reset();
+  platform_->CallOnForegroundThread(main_thread_isolate_, new DisconnectInspectorBackendTask());
+  // Wake up main thread.
+  uv_async_send(&main_thread_async_);
 }
 
 void NodeDebugger::WaitForStartup(v8::Local<v8::Function> callback) {
@@ -153,6 +164,7 @@ void NodeDebugger::RunIfPaused() {
 }
 
 void NodeDebugger::DispatchOnBackend(const std::string& message) {
+  fprintf(stderr, "SendToBackend: %s\n", message.c_str());
   platform_->CallOnForegroundThread(main_thread_isolate_, new DispatchOnInspectorBackendTask(message));
   // Wake up main thread.
   uv_async_send(&main_thread_async_);
@@ -167,6 +179,7 @@ void NodeDebugger::PumpServerMessageLoop() {
 }
 
 void NodeDebugger::SendToFrontend(const std::string& message) {
+  fprintf(stderr, "SendToFrontend: %s\n", message.c_str());
   server_message_loop_->CallOnForegroundThread(server_env_->isolate(), new SendToFrontendTask(message));
   // Wake up server thread.
   uv_async_send(&server_thread_async_);
