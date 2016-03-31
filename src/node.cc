@@ -146,8 +146,8 @@ static const char* eval_string = nullptr;
 static unsigned int preload_module_count = 0;
 static const char** preload_modules = nullptr;
 static bool use_debug_agent = false;
-static bool use_devtools = false;
-static bool pause_for_devtools = false;
+static bool use_inspector = false;
+static bool pause_for_inspector = false;
 static bool debug_wait_connect = false;
 static int debug_port = 5858;
 static bool prof_process = false;
@@ -3048,9 +3048,9 @@ void SetupProcessObject(Environment* env,
     READONLY_PROPERTY(process, "profProcess", True(env->isolate()));
   }
 
-  // --devtools
-  if (pause_for_devtools) {
-    READONLY_PROPERTY(process, "devtoolsPause", True(env->isolate()));
+  // --remote-debugging-port-brk
+  if (pause_for_inspector) {
+    READONLY_PROPERTY(process, "inspectorPause", True(env->isolate()));
   }
 
   // --trace-deprecation
@@ -3266,12 +3266,12 @@ static bool ParseDebugOpt(const char* arg) {
     port = arg + sizeof("--debug-port=") - 1;
   } else if (!strncmp(arg, "--remote-debugging-port=",
       sizeof("--remote-debugging-port=") - 1)) {
-    use_devtools = true;
+    use_inspector = true;
     port = arg + sizeof("--remote-debugging-port=") - 1;
   } else if (!strncmp(arg, "--remote-debugging-port-brk=",
       sizeof("--remote-debugging-port-brk=") - 1)) {
-    use_devtools = true;
-    pause_for_devtools = true;
+    use_inspector = true;
+    pause_for_inspector = true;
     port = arg + sizeof("--remote-debugging-port-brk=") - 1;
   } else {
     return false;
@@ -4183,7 +4183,7 @@ static void StartNodeInstance(void* arg) {
     if (instance_data->use_debug_agent())
       StartDebug(env, debug_wait_connect);
 
-    if (use_devtools && !instance_data->is_remote_debug_server())
+    if (use_inspector && !instance_data->is_remote_debug_server())
       NodeDebugger::init(default_platform, isolate, context);
 
     {
@@ -4252,7 +4252,7 @@ static void StartNodeInstance(void* arg) {
   delete array_buffer_allocator;
 }
 
-static void DevToolsRun(void* arg) {
+static void InspectorRun(void* arg) {
   fprintf(stderr, "Open 'chrome-devtools://devtools/bundled/inspector.html?ws=localhost:%zu/node' in Chrome Canary\n", debug_port);
   StartNodeInstance(arg);
 }
@@ -4284,7 +4284,7 @@ int Start(int argc, char** argv) {
 
   int exit_code = 1;
   {
-    if (use_devtools) {
+    if (use_inspector) {
       uv_loop_t worker_loop;
       int rc = uv_loop_init(&worker_loop);
       CHECK_EQ(0, rc);
@@ -4298,7 +4298,7 @@ int Start(int argc, char** argv) {
                                      exec_argv,
                                      false);
       uv_thread_t worker_thread;
-      rc = uv_thread_create(&worker_thread, &DevToolsRun, &worker_instance_data);
+      rc = uv_thread_create(&worker_thread, &InspectorRun, &worker_instance_data);
       CHECK_EQ(0, rc);
     }
 
